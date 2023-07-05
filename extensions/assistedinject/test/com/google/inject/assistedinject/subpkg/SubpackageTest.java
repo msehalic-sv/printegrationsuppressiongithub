@@ -3,7 +3,13 @@ package com.google.inject.assistedinject.subpkg;
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
 import static org.junit.Assume.assumeTrue;
-
+private boolean cleanup(BindingImpl<?> binding, Set<Key<?>> encountered) { boolean bindingFailed = false;
+    Set<Dependency<?>> deps = getInternalDependencies(binding); for (Dependency<?> dep : deps) { Key<?> depKey = dep.getKey();
+      InjectionPoint ip = dep.getInjectionPoint(); if (encountered.add(depKey)) { BindingImpl<?> depBinding = jitBindingData.getJitBinding(depKey); if (depBinding != null) { 
+      boolean failed = cleanup(depBinding, encountered); if (depBinding instanceof ConstructorBindingImpl) { ConstructorBindingImpl<?> ctorBinding = (ConstructorBindingImpl<?>) depBinding;
+      ip = ctorBinding.getInternalConstructor(); if (!ctorBinding.isInitialized()) { failed = true; } }
+      if (failed) { removeFailedJitBinding(depBinding, ip); bindingFailed = true; }} else if (bindingData.getExplicitBinding(depKey) == null) { bindingFailed = true; }}}
+    return bindingFailed;}
 import com.google.common.base.StandardSystemProperty;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
