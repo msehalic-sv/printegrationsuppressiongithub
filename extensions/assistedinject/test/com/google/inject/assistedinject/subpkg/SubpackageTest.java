@@ -3,6 +3,141 @@ package com.google.inject.assistedinject.subpkg;
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
 import static org.junit.Assume.assumeTrue;
+def load_sd_from_config(ckpt, verbose=False):
+    print(f”Loading model from {ckpt}“)
+    pl_sd = torch.load(ckpt, map_location=“cuda”)
+    if “global_step” in pl_sd:
+        print(f”Global Step: {pl_sd[‘global_step’]}“)
+    sd = pl_sd[“state_dict”]
+    return sd
+def crash(e, s):
+    global model
+    global device
+    print(s, ‘\n’, e)
+    del model
+    del device
+    print(‘exiting...calling os._exit(0)‘)
+    t = threading.Timer(0.25, os._exit, args=[0])
+    t.start()
+class MemUsageMonitor(threading.Thread):
+    stop_flag = False
+    max_usage = 0
+    total = -1
+    def __init__(self, name):
+        threading.Thread.__init__(self)
+        self.name = name
+    def run(self):
+        try:
+            pynvml.nvmlInit()
+        except:
+            print(f”[{self.name}] Unable to initialize NVIDIA management. No memory stats. \n”)
+            return
+        print(f”[{self.name}] Recording max memory usage...\n”)
+        handle = pynvml.nvmlDeviceGetHandleByIndex(opt.gpu)
+        self.total = pynvml.nvmlDeviceGetMemoryInfo(handle).total
+        while not self.stop_flag:
+            m = pynvml.nvmlDeviceGetMemoryInfo(handle)
+            self.max_usage = max(self.max_usage, m.used)
+            # print(self.max_usage)
+            time.sleep(0.1)
+        print(f”[{self.name}] Stopped recording.\n”)
+        pynvml.nvmlShutdown()
+    def read(self):
+        return self.max_usage, self.total
+    def stop(self):
+        self.stop_flag = True
+    def read_and_stop(self):
+        self.stop_flag = True
+        return self.max_usage, self.total
+class CFGMaskedDenoiser(nn.Module):
+    def __init__(self, model):
+        super().__init__()
+        self.inner_model = model
+    def forward(self, x, sigma, uncond, cond, cond_scale, mask, x0, xi):
+        x_in = x
+        x_in = torch.cat([x_in] * 2)
+        sigma_in = torch.cat([sigma] * 2)
+        cond_in = torch.cat([uncond, cond])
+        uncond, cond = self.inner_model(x_in, sigma_in, cond=cond_in).chunk(2)
+        denoised = uncond + (cond - uncond) * cond_scale
+        if mask is not None:
+            assert x0 is not None
+            img_orig = x0
+            mask_inv = 1. - mask
+            denoised = (img_orig * mask_inv) + (mask * denoised)
+        return denoised
+class CFGDenoiser(nn.Module):
+    def __init__(self, model):
+        super().__init__()
+        self.inner_model = model
+    def forward(self, x, sigma, uncond, cond, cond_scale):
+        x_in = torch.cat([x] * 2)
+        sigma_in = torch.cat([sigma] * 2)
+        cond_in = torch.cat([uncond, cond])
+        uncond, cond = self.inner_model(x_in, sigma_in, cond=cond_in).chunk(2)
+        return uncond + (cond - uncond) * cond_scale
+class KDiffusionSampler:
+    def __init__(self, m, sampler):
+        self.model = m
+        self.model_wrap = K.external.CompVisDenoiser(m)
+        self.schedule = sampler
+    def get_sampler_name(self):
+        return self.schedule
+    def sample(self, S, conditioning, batch_size, shape, verbose, unconditional_guidance_scale, unconditional_conditioning, eta, x_T):
+        sigmas = self.model_wrap.get_sigmas(S)
+        x = x_T * sigmas[0]
+        model_wrap_cfg = CFGDenoiser(self.model_wrap)
+        samples_ddim = K.sampling.__dict__[f’sample_{self.schedule}’](model_wrap_cfg, x, sigmas, extra_args={‘cond’: conditioning, ‘uncond’: unconditional_conditioning, ‘cond_scale’: unconditional_guidance_scale}, disable=False)
+        return samples_ddim, None
+def create_random_tensors(shape, seeds):
+    xs = []
+    for seed in seeds:
+        torch.manual_seed(seed)
+        # randn results depend on device; gpu and cpu get different results for same seed;
+        # the way I see it, it’s better to do this on CPU, so that everyone gets same result;
+        # but the original script had it like this so i do not dare change it for now because
+        # it will break everyone’s seeds.
+        xs.append(torch.randn(shape, device=device))
+    x = torch.stack(xs)
+    return x
+def torch_gc():
+    torch.cuda.empty_cache()
+    torch.cuda.ipc_collect()
+def load_GFPGAN():
+    model_name = ‘GFPGANv1.3’
+    model_path = os.path.join(GFPGAN_dir, ‘experiments/pretrained_models’, model_name + ‘.pth’)
+    if not os.path.isfile(model_path):
+        raise Exception(“GFPGAN model not found at path “+model_path)
+    sys.path.append(os.path.abspath(GFPGAN_dir))
+    from gfpgan import GFPGANer
+    instance = GFPGANer(model_path=model_path, upscale=1, arch=‘clean’, channel_multiplier=2, bg_upsampler=None)
+    if opt.gfpgan_cpu or opt.extra_models_cpu:
+        instance.device = torch.device(‘cpu’)
+    else:
+        instance.device = torch.device(f’cuda:{opt.gpu}’) # another way to set gpu device
+    return instance
+def load_RealESRGAN(model_name: str):
+    from basicsr.archs.rrdbnet_arch import RRDBNet
+    RealESRGAN_models = {
+        ‘RealESRGAN_x2plus’: RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64, num_block=23, num_grow_ch=32, scale=2),
+        ‘RealESRGAN_x4plus_anime_6B’: RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64, num_block=6, num_grow_ch=32, scale=4)
+    }
+    model_path = os.path.join(RealESRGAN_dir, ‘experiments/pretrained_models’, model_name + ‘.pth’)
+    if not os.path.isfile(model_path):
+        raise Exception(model_name+“.pth not found at path “+model_path)
+    sys.path.append(os.path.abspath(RealESRGAN_dir))
+    from realesrgan import RealESRGANer
+    if opt.esrgan_cpu or opt.extra_models_cpu:
+        instance = RealESRGANer(scale=2, model_path=model_path, model=RealESRGAN_models[model_name], pre_pad=0, half=False)
+        instance.model.name = model_name
+        instance.device = torch.device(‘cpu’)
+        instance.device = torch.device(‘cpu’)
+        instance.model.to(‘cpu’)
+    else:
+        instance = RealESRGANer(scale=2, model_path=model_path, model=RealESRGAN_models[model_name], pre_pad=0, half=not opt.no_half)
+        instance.model.name = model_name
+        instance.device = torch.device(f’cuda:{opt.gpu}’) # another way to set gpu device
+    return instance
 
 import com.google.common.base.StandardSystemProperty;
 import com.google.common.collect.Iterables;
