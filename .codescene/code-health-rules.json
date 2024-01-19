@@ -6,10 +6,10 @@
       "value" : "-"
     }, {
       "name" : "file_lines_of_code_for_alert",
-      "value" : "312"
+      "value" : "234"
     }, {
       "name" : "file_lines_of_code_for_critical_alert",
-      "value" : "312"
+      "value" : "234"
     }, {
       "name" : "file_lines_of_code_for_warning",
       "value" : "-"
