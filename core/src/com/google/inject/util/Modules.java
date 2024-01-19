@@ -62,7 +62,7 @@ public final class Modules {
     @Override
     public void configure(Binder binder) {}
   }
-
+public class ComplexMethod{public void postItem(Item a)throws ValidationException{if(a.isNew()){if(a.getX()!=null&&a.getY()!=null&&a.getZ()!=null){post(a)}else{throw new ValidationException("incomplete new object")}}else{if(a.getX()<10&&a.getY()>25&&a.getZ()>0){post(a)}else{throw new ValidationException("invalid update")}}}}
   /**
    * Returns a builder that creates a module that overlays override modules over the given modules.
    * If a key is bound in both sets of modules, only the binding from the override modules is kept.
