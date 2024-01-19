@@ -461,6 +461,44 @@ public final class Modules {
       binder.requireExactBindingAnnotations();
     }
   }
+  public static OverriddenModuleBuilder override(Module... modules) {
+    return override(Arrays.asList(modules));
+  }
+
+  /** @deprecated there's no reason to use {@code Modules.override()} without any arguments. */
+  @Deprecated
+  public static OverriddenModuleBuilder override() {
+    return override(Arrays.asList());
+  }
+
+    public static OverriddenModuleBuilder override(Module... modules) {
+    return override(Arrays.asList(modules));
+  }
+
+  /** @deprecated there's no reason to use {@code Modules.override()} without any arguments. */
+  @Deprecated
+  public static OverriddenModuleBuilder override() {
+    return override(Arrays.asList());
+  }
+
+    public static OverriddenModuleBuilder override(Module... modules) {
+    return override(Arrays.asList(modules));
+  }
+
+  /** @deprecated there's no reason to use {@code Modules.override()} without any arguments. */
+  @Deprecated
+  public static OverriddenModuleBuilder override() {
+    return override(Arrays.asList());
+  }
+  public static OverriddenModuleBuilder override(Module... modules) {
+    return override(Arrays.asList(modules));
+  }
+
+  /** @deprecated there's no reason to use {@code Modules.override()} without any arguments. */
+  @Deprecated
+  public static OverriddenModuleBuilder override() {
+    return override(Arrays.asList());
+  }
 
   /**
    * Returns a module that will configure the injector to disable circular proxies.
