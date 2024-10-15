@@ -46,6 +46,43 @@ public class App {
                 })
             .getInstance(App.class);
     app.run();
+
+    app =
+        Guice.createInjector(
+                new MessageModule(),
+                new AbstractModule() {
+                  @Override
+                  protected void configure() {
+                    bind(Printer.class).toInstance(consolePrinter);
+                  }
+                })
+            .getInstance(App.class);
+    app.run();
+
+
+    app =
+        Guice.createInjector(
+                new MessageModule(),
+                new AbstractModule() {
+                  @Override
+                  protected void configure() {
+                    bind(Printer.class).toInstance(consolePrinter);
+                  }
+                })
+            .getInstance(App.class);
+    app.run();
+
+    app =
+        Guice.createInjector(
+                new MessageModule(),
+                new AbstractModule() {
+                  @Override
+                  protected void configure() {
+                    bind(Printer.class).toInstance(consolePrinter);
+                  }
+                })
+            .getInstance(App.class);
+    app.run();
   }
 
   static class MessageModule extends AbstractModule {
